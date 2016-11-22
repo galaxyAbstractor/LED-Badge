@@ -1,5 +1,3 @@
-#include <ArduinoJson.h>
-#include <Wire.h>  // Only needed for Arduino 1.6.5 and earlier
 #include "SSD1306.h" // alias for `#include "SSD1306Wire.h"`
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
@@ -7,8 +5,7 @@
 
 HTTPClient http;
 SSD1306  display(0x3c, 0, 2);
-String twitter = "http://test-galaxyabstractor.c9users.io";
-StaticJsonBuffer<3000> jsonBuffer;
+String twitter = "";
 
 String rows[2];
 int offsets[2];
@@ -22,18 +19,16 @@ void setup() {
 
   display.flipScreenVertically();
   display.setFont(Liberation_Mono_24);
-  WiFi.begin();
-    while (WiFi.status() != WL_CONNECTED)
-    {
-      delay(500);
-    }
+ 
 }
 
 void scroller() {
+   display.clear();
+  
   for(int i = 0; i < 2; i++) {
     if(rows[i].length() > 0) {
       int offset = offsets[i];
-      display.drawString(offset, i * 30, rows[i].substring(0, 15));
+      display.drawString(offset, 5 + (i * 30), rows[i].substring(0, 15));
   
       if(offset < -13) {
        rows[i] = rows[i].substring(1);
@@ -45,42 +40,63 @@ void scroller() {
         offsets[i] = offset - 1;
       }
     }
-    
   }
-  
-}
 
-void tick () {
-  display.clear();
-  
-  if(left == 0) {
-   
-    http.begin(twitter, 80, "/");
-    int httpCode = http.GET();
-    String response = http.getString();
-
-    JsonObject& root = jsonBuffer.parseObject(response);
-
-    for(int i = 0; i < 2; i++) {
-      const char* data = root["data"][i];
-      rows[i] = String(data);
-      offsets[i] = (i * 14);
-      
-    }
-    left = 2;
-  }
-  scroller();
-  
   display.display();
 }
 
-unsigned long prevFrameTime = 0L;
+void getTweets() {
+  if(WiFi.status() != WL_CONNECTED) {
+      WiFi.begin();
+    }
+ 
+    while (WiFi.status() != WL_CONNECTED)
+    {
+      delay(200);
+    }
+    
+    http.begin(twitter);
+    http.setUserAgent("Galaxy Badge Project");
+    int httpCode = http.GET();
+    String response = http.getString();
+    
+    int firstIndex = response.indexOf('||||');
+    
+    rows[0] = response.substring(0, firstIndex);
+    rows[1] = response.substring(firstIndex+4);
+    offsets[0] = display.getStringWidth(rows[0]);
+    offsets[1] = display.getStringWidth(rows[0]) + 60;
+    
+    if(offsets[0] > 1 && offsets[1] > 60) {
+      left = 2;
+    } else if(offsets[0] > 1) {
+      left = 1;
+    }
 
+}
+
+void tick () {
+
+  if(left == 0) {
+    getTweets();
+  }
+  
+  scroller();
+}
+
+unsigned long prevFrameTime = 0L;
+bool a = true;
 void loop() {
+  if(a) {
+    display.drawString(0, 1 * 30, "Booting");
+    
+    display.display();
+  }
+  a = false;
   // put your main code here, to run repeatedly:
   unsigned long t = millis();
   
-  if((t - prevFrameTime) >= (20L)) {
+  if((t - prevFrameTime) >= (10L)) {
     tick();
     prevFrameTime = millis();
   }
